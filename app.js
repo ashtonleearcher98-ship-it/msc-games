@@ -484,10 +484,7 @@ function setup(){
   $('#signUpTab').addEventListener('click',()=>selectAuthTab('signup'));
   $('#memberProfileForm').addEventListener('submit',event=>{event.preventDefault();saveMemberProfile(event.currentTarget);});
   $('#memberSignOut').addEventListener('click',async()=>{if(db)await db.auth.signOut();showRegistryView('login');selectAuthTab('login');alertUser('Signed out.');});
-  $$('img[data-logo-fallback]').forEach(img=>img.addEventListener('error',()=>{
-    const fallback=img.dataset.logoFallback;
-    if(fallback&&img.getAttribute('src')!==fallback)img.src=fallback;
-  }));
+
   $('#signOutButton').addEventListener('click',async()=>{
     if(db)await db.auth.signOut();showRegistryView('login');selectAuthTab('login');alertUser('Signed out.');
   });

@@ -1,1 +1,17 @@
-{"name":"Micronation Sports Championships","short_name":"MSC Games","description":"Official MSC Games information, future applications and registry portal","start_url":"./#/home","display":"standalone","background_color":"#07162f","theme_color":"#07162f","icons":[{"src":"assets/msc-mark.svg","type":"image/svg+xml","sizes":"any"}]}
+{
+  "name": "Micronation Sports Championships",
+  "short_name": "MSC Games",
+  "description": "Official MSC Games information, future applications and registry portal",
+  "start_url": "./#/home",
+  "display": "standalone",
+  "background_color": "#07162f",
+  "theme_color": "#07162f",
+  "icons": [
+    {
+      "src": "assets/msc-official.png",
+      "type": "image/png",
+      "sizes": "any",
+      "purpose": "any maskable"
+    }
+  ]
+}
