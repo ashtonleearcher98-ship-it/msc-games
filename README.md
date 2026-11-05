@@ -1,6 +1,6 @@
 # MSC Games — Micronation Sports Championships
 
-A responsive, GitHub Pages-compatible sporting authority website for the Micronation Sports Championships. Original four-ribbon SVG emblem, floating pill navigation, Games history, future host bids, delegation interest forms, and a protected administration registry.
+A responsive, GitHub Pages-compatible sporting authority website for the Micronation Sports Championships. Redesigned multicolour athlete emblem, floating pill navigation, Games history, future host bids, delegation interest forms, and a protected administration registry.
 
 ## Pages
 
@@ -19,13 +19,13 @@ python -m http.server 8000
 
 Open `http://localhost:8000/#/home`. There is no build step. The frontend works as a design preview before the database is configured, but it **will not falsely claim that unconnected forms submitted successfully**.
 
-## Create a dedicated Supabase project
+## Live Supabase deployment
 
-1. Create a **separate** Supabase project for MSC rather than mixing data with the PMAC or Greenwick Bank projects.
-2. In Supabase SQL Editor, execute `supabase/schema.sql`.
-3. In `config.js` set `supabaseUrl` to the new project URL and `supabasePublishableKey` to the project's public publishable key (`sb_publishable_...`). This key is explicitly designed to be public, but never include service role or secret keys in the website.
-4. In **Authentication → Users**, create **admin@mscgames.cgw** using the supplied password and choose the option to **auto-confirm / mark email verified**. This allows password sign-in without requiring an email verification link. Never place a password in a public website file, migration or GitHub repository.
-5. In the SQL Editor, grant registry access to *that authenticated user* by running:
+1. Dedicated project **mmetxqmyxhxwmjpxjuzb** is live in the Sydney region, separate from PMAC and banking projects.
+2. The private application/registry tables and read-only editions/disciplines/results tables have been created. The base schema is `supabase/schema.sql` and the historical data migration is `supabase/02_games_history.sql`.
+3. The deployed `config.js` already contains the dedicated project's API URL and *public* publishable key. Do not replace it with a service role or secret key.
+4. **Not yet completed:** in **Authentication → Users**, create **admin@mscgames.cgw** using the supplied password and choose the option to **auto-confirm / mark email verified**. This allows password sign-in without requiring an email verification link. Never place a password in a public website file, migration or GitHub repository.
+5. Only after that account exists, in the SQL Editor grant registry access to *that authenticated user* by running:
 
 ```sql
 insert into public.msc_admins (user_id)
@@ -55,7 +55,17 @@ The site uses hash-based routes intentionally, so deep-linked pages work on GitH
 - [MSC June 2026 host search / virtual hosting announcement](https://www.reddit.com/r/micronations/comments/1twafi7/msc_games_2026_update_and_host_nations_seeking/)
 - [MicroWiki: Micronational Olympic Federation](https://micronations.wiki/wiki/MOF) (distinct organisation; not MSC)
 
-Future Games are represented as *expressions of interest*, not approved fixtures or host announcements.
+- [Original MSC 2026 Google Sites page](https://sites.google.com/view/msc-2026/msc-games-2026) (provided by the organiser; the automated research fetch could not access its page contents)
+
+Future Games are represented as *expressions of interest*, not approved fixtures or host announcements. Published historical records describe the 2025 postponement and the June 2026 virtual-host transition; no medals, athletes, scores or confirmed schedules have been fabricated.
+
+## Verified deployment checks
+
+- GitHub Actions `Deploy MSC Games to GitHub Pages` completed successfully for the redesign.
+- The live database allows anonymous form INSERT, while private applications and admin tables have no anonymous SELECT permission.
+- Anonymous delegation and host submissions were tested in rollback transactions without saving fake application rows.
+- The new Games archive is publicly readable, while results are only visible if explicitly published.
+- An actual admin Auth account is **not yet provisioned**. Creating its verified Auth identity and attaching its `msc_admins` grant still requires the Supabase Dashboard steps above.
 
 ## Security
 
