@@ -113,7 +113,7 @@ async function checkSession(){
       $('#adminIdentity').textContent=data.user.email||'Registry administrator';
       $('#adminRolePill').textContent=adminRole==='superadmin'?'SUPERADMIN · FINAL AUTHORITY':'ADMIN · REVIEW ACCESS';
       $('#adminRolePill').classList.toggle('role-superadmin',adminRole==='superadmin');
-      $('[data-superadmin-only]').forEach(el=>el.classList.toggle('is-hidden',adminRole!=='superadmin'));
+      $$('[data-superadmin-only]').forEach(el=>el.classList.toggle('is-hidden',adminRole!=='superadmin'));
       await refresh();
     }else{
       member=data.user;
