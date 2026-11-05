@@ -38,3 +38,32 @@
 .edition-source{margin-top:auto;padding-top:12px;border-top:1px solid #dfe7f3}
 .edition-source a{font-size:12px;font-weight:700;color:#2858d4}
 @media(max-width:720px){.live-editions{grid-template-columns:1fr}.games-record-heading{align-items:flex-start;flex-direction:column}.edition-card{padding:24px}}
+
+/* Member sign-in, sign-up and private member registry */
+.auth-switch{display:grid;grid-template-columns:1fr 1fr;gap:7px;padding:6px;background:#f0f5ff;border-radius:99px;margin-bottom:28px}
+.auth-switch .tab{margin:0;min-width:0;border:0;padding:13px 12px;background:transparent;color:#597294;transition:all .2s}
+.auth-switch .tab.active{background:#235bfc;box-shadow:0 8px 18px #245aff22;color:white}
+.login-card .field-row{gap:10px}
+.login-card label{display:block;font-size:12px;color:#354767;font-weight:750;margin-top:13px}
+.login-card label input{width:100%;margin-top:8px;min-height:47px}
+.signup-note{font-size:11px;line-height:1.6;color:#7285a3;margin:13px 0}
+.member-summary{border-radius:27px;padding:36px;background:linear-gradient(120deg,#0e2855,#204d9c);color:#fff;margin-bottom:24px;box-shadow:0 24px 65px #17335b1c}
+.member-summary-label{font-size:10px;letter-spacing:.18em;color:#9cbbf4;font-weight:800;margin-bottom:13px}
+.member-summary h3{font-size:clamp(27px,3.6vw,44px);letter-spacing:-.045em;margin:0 0 8px}
+.member-summary p{max-width:640px;color:#c3d4fa;line-height:1.65;font-size:13px;margin:0 0 24px}
+.member-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px}
+.member-card{border:1px solid #e0e8f5;border-radius:25px;padding:30px;background:#fff;min-width:0}
+.member-card-heading>span{font-size:10px;letter-spacing:.12em;color:#3863af;font-weight:850}
+.member-card-heading h3{font-size:clamp(22px,2.8vw,30px);margin:8px 0}
+.member-card-heading p{color:#8191a9;font-size:12px;margin-bottom:22px}
+.member-card label{display:block;font-size:12px;font-weight:750;margin-bottom:17px;color:#354c6b}
+.member-card input{width:100%;margin-top:8px}
+.member-card .button{margin-top:6px}
+.member-application{display:flex;justify-content:space-between;align-items:center;gap:12px;border-bottom:1px solid #e9eef6;padding:15px 0}
+.member-application:first-child{padding-top:0}
+.member-application strong{font-size:13px;color:#1b3558}
+.member-application small{display:block;font-size:11px;margin-top:5px;color:#7b8ba0}
+.member-empty{font-size:13px;color:#75859d;line-height:1.7}
+.brand img,.login-card-top img,.footer-brand img{object-fit:contain}
+.hero-emblem img{object-fit:contain}
+@media(max-width:800px){.member-grid{grid-template-columns:1fr}.member-card{padding:23px}.member-summary{padding:28px}}

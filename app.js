@@ -2,7 +2,7 @@ import { MSC_CONFIG } from './config.js';
 const $ = (selector, root=document) => root.querySelector(selector);
 const $$ = (selector, root=document) => Array.from(root.querySelectorAll(selector));
 const ready = /^https:\/\/[a-z0-9-]+\.supabase\.co\/?$/.test(MSC_CONFIG.supabaseUrl) && MSC_CONFIG.supabasePublishableKey.length > 20;
-let db=null, admin=null, selected='delegations', rows={delegations:[],hosts:[],registry:[]}, notification;
+let db=null, admin=null, member=null, selected='delegations', rows={delegations:[],hosts:[],registry:[]}, notification;
 let editionsLoaded = false;
 
 function alertUser(message){
@@ -67,43 +67,158 @@ async function submitApplication(kind,form){
   btn.disabled=true;btn.textContent='Submitting…';
   try{
     const table=kind==='host'?'msc_host_applications':'msc_delegation_applications';
-    const {error}=await client.from(table).insert(fields(form));
+    const payload=fields(form);
+    const {data:{user}}=await client.auth.getUser();
+    if(user?.id)payload.user_id=user.id;
+    const {error}=await client.from(table).insert(payload);
     if(error)throw error;
     form.reset();message(target,'Your expression of interest was received by the MSC registry.',true);
     alertUser('Application submitted successfully.');
+    if(member)loadMemberData(member);
   }catch(error){console.error(error);message(target,'Submission failed. Please try again or contact the MSC administration.');}
   finally{btn.disabled=false;btn.innerHTML=text;}
 }
-function showDashboard(visible){
-  $('#registryLogin').classList.toggle('is-hidden',visible);
-  $('#registryDashboard').classList.toggle('is-hidden',!visible);
-  if(!visible){admin=null;$('#loginForm').elements.password.value='';}
+
+function showRegistryView(which){
+  $('#registryLogin').classList.toggle('is-hidden',which!=='login');
+  $('#registryDashboard').classList.toggle('is-hidden',which!=='admin');
+  $('#memberDashboard').classList.toggle('is-hidden',which!=='member');
+  if(which!=='admin')admin=null;
+  if(which!=='member')member=null;
+}
+function selectAuthTab(which){
+  const signup=which==='signup';
+  $('#loginForm').classList.toggle('is-hidden',signup);
+  $('#signupForm').classList.toggle('is-hidden',!signup);
+  $('#signInTab').classList.toggle('active',!signup);
+  $('#signUpTab').classList.toggle('active',signup);
+  $('#signInTab').setAttribute('aria-selected',String(!signup));
+  $('#signUpTab').setAttribute('aria-selected',String(signup));
+  $('#authHeading').textContent=signup?'Join the registry.':'Welcome back.';
+  $('#authSubheading').textContent=signup?'Create a member account for your micronation.':'Sign in to access your member account or the administrator registry.';
+  message('loginMessage','');message('signupMessage','');
 }
 async function checkSession(){
   const client=await getDB();
-  if(!client){showDashboard(false);message('loginMessage','The administrator database is not configured. Sign-in is not yet available.');return;}
+  if(!client){showRegistryView('login');message('loginMessage','The database is temporarily unavailable. Please try again.');return;}
   try{
     const {data,error}=await client.auth.getUser();
-    if(error||!data.user){showDashboard(false);return;}
+    if(error||!data?.user){showRegistryView('login');return;}
     const {data:grant,error:grantError}=await client.from('msc_admins').select('user_id').eq('user_id',data.user.id).maybeSingle();
-    if(grantError||!grant){await client.auth.signOut();showDashboard(false);message('loginMessage','This account does not have permission to access the MSC registry.');return;}
-    admin=data.user;showDashboard(true);
-    $('#adminIdentity').textContent=admin.email||'Registry administrator';
-    await refresh();
-  }catch(error){console.error(error);showDashboard(false);message('loginMessage','Unable to validate your administrator session.');}
+    if(grantError)throw grantError;
+    if(grant){
+      admin=data.user;
+      showRegistryView('admin');
+      $('#adminIdentity').textContent=data.user.email||'Registry administrator';
+      await refresh();
+    }else{
+      member=data.user;
+      showRegistryView('member');
+      $('#memberIdentity').textContent=data.user.email||'MSC member';
+      await loadMemberData(data.user);
+    }
+  }catch(error){
+    console.error('Registry session failed',error);
+    showRegistryView('login');
+    message('loginMessage','Unable to load your account. Please try again.');
+  }
 }
 async function login(form){
   if(!form.reportValidity())return;
   const client=await getDB();
-  if(!client){message('loginMessage','MSC database has not been configured.');return;}
-  const button=$('[type=submit]',form);button.disabled=true;message('loginMessage','');
+  if(!client){message('loginMessage','The MSC authentication service could not be reached.');return;}
+  const button=$('[type=submit]',form);
+  button.disabled=true;
+  message('loginMessage','');
   try{
-    const {error}=await client.auth.signInWithPassword({email:form.elements.email.value.trim(),password:form.elements.password.value});
+    const {data,error}=await client.auth.signInWithPassword({email:form.elements.email.value.trim(),password:form.elements.password.value});
     if(error)throw error;
+    if(!data?.session)throw new Error('A valid session was not returned.');
+    form.elements.password.value='';
     await checkSession();
-  }catch(error){console.warn('Sign-in failed',error);message('loginMessage','Unable to sign in. Please check the account and password.');}
-  finally{button.disabled=false;}
+  }catch(error){
+    console.warn('Sign-in failed',error);
+    const text=/email not confirmed/i.test(error.message||'')?'Please confirm your email before signing in.':/invalid login credentials/i.test(error.message||'')?'Incorrect email or password, or this account has not been created yet.':String(error.message||'Sign-in failed.');
+    message('loginMessage',text);
+  }finally{button.disabled=false;}
 }
+async function signup(form){
+  if(!form.reportValidity())return;
+  if(form.elements.password.value!==form.elements.confirm_password.value){
+    message('signupMessage','The passwords do not match.');return;
+  }
+  const client=await getDB();
+  if(!client){message('signupMessage','The MSC authentication service could not be reached.');return;}
+  const button=$('[type=submit]',form);button.disabled=true;
+  message('signupMessage','');
+  const payload=fields(form);
+  try{
+    const {data,error}=await client.auth.signUp({
+      email:payload.email,
+      password:payload.password,
+      options:{
+        data:{nation_name:payload.nation_name,representative:payload.representative},
+        emailRedirectTo:location.origin+location.pathname+'#/registry'
+      }
+    });
+    if(error)throw error;
+    if(data?.session&&data?.user){
+      form.reset();
+      alertUser('Member account created.');
+      await checkSession();
+    }else if(data?.user){
+      form.reset();
+      message('signupMessage','Account request received. Check your inbox for a confirmation link if one was sent. If you do not receive one, contact MSC support.',true);
+    }else{
+      message('signupMessage','The service did not confirm account creation. Please try again.');
+    }
+  }catch(error){
+    console.warn('Registration failed',error);
+    message('signupMessage',String(error.message||'Unable to register right now.'));
+  }finally{button.disabled=false;}
+}
+async function loadMemberData(user){
+  const client=await getDB();
+  if(!client||!user)return;
+  try{
+    let {data:profile,error}=await client.from('msc_member_profiles').select('nation_name,representative').eq('user_id',user.id).maybeSingle();
+    if(error)throw error;
+    const meta=user.user_metadata||{};
+    if(!profile&&meta.nation_name&&meta.representative){
+      const created=await client.from('msc_member_profiles').insert({user_id:user.id,nation_name:String(meta.nation_name).slice(0,120),representative:String(meta.representative).slice(0,120)});
+      if(created.error)console.warn('Initial profile creation:',created.error.message);
+      else profile={nation_name:meta.nation_name,representative:meta.representative};
+    }
+    const form=$('#memberProfileForm');
+    form.elements.nation_name.value=profile?.nation_name||'';
+    form.elements.representative.value=profile?.representative||'';
+    $('#memberGreeting').textContent=profile?.nation_name?'Welcome, '+profile.nation_name+'.':'Welcome to the MSC registry.';
+    const [delegations,hosts]=await Promise.all([
+      client.from('msc_delegation_applications').select('nation_name,status,created_at').eq('user_id',user.id).order('created_at',{ascending:false}).limit(30),
+      client.from('msc_host_applications').select('nation_name,status,created_at').eq('user_id',user.id).order('created_at',{ascending:false}).limit(30)
+    ]);
+    if(delegations.error||hosts.error)throw delegations.error||hosts.error;
+    const merged=[...(delegations.data||[]).map(x=>({...x,kind:'Delegation'})),...(hosts.data||[]).map(x=>({...x,kind:'Hosting'}))].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+    $('#memberApplications').innerHTML=merged.length?merged.map(x=>'<div class="member-application"><div><strong>'+safe(x.nation_name)+'</strong><small>'+safe(x.kind)+' · '+dateText(x.created_at)+'</small></div><span class="pill-status '+safe(x.status,20)+'">'+safe(x.status,20)+'</span></div>').join(''):'<p class="member-empty">No applications are linked to your account. Submit an application while signed in to track it here.</p>';
+  }catch(error){console.error('Member profile failed',error);message('memberProfileMessage','Your profile could not be loaded. Please retry.');}
+}
+async function saveMemberProfile(form){
+  if(!member||!form.reportValidity())return;
+  const client=await getDB();
+  if(!client)return;
+  const p=fields(form);
+  try{
+    const {data:exists,error:checkError}=await client.from('msc_member_profiles').select('user_id').eq('user_id',member.id).maybeSingle();
+    if(checkError)throw checkError;
+    const res=exists
+      ? await client.from('msc_member_profiles').update({nation_name:p.nation_name,representative:p.representative,updated_at:new Date().toISOString()}).eq('user_id',member.id)
+      : await client.from('msc_member_profiles').insert({user_id:member.id,nation_name:p.nation_name,representative:p.representative});
+    if(res.error)throw res.error;
+    message('memberProfileMessage','Your profile has been saved.',true);
+    $('#memberGreeting').textContent='Welcome, '+p.nation_name+'.';
+  }catch(error){console.error(error);message('memberProfileMessage','Unable to save the profile. '+String(error.message||''));}
+}
+
 async function refresh(){
   if(!db||!admin)return;
   try{
@@ -218,8 +333,17 @@ function setup(){
   $('#delegationForm').addEventListener('submit',event=>{event.preventDefault();submitApplication('delegation',event.currentTarget);});
   $('#hostForm').addEventListener('submit',event=>{event.preventDefault();submitApplication('host',event.currentTarget);});
   $('#loginForm').addEventListener('submit',event=>{event.preventDefault();login(event.currentTarget);});
+  $('#signupForm').addEventListener('submit',event=>{event.preventDefault();signup(event.currentTarget);});
+  $('#signInTab').addEventListener('click',()=>selectAuthTab('login'));
+  $('#signUpTab').addEventListener('click',()=>selectAuthTab('signup'));
+  $('#memberProfileForm').addEventListener('submit',event=>{event.preventDefault();saveMemberProfile(event.currentTarget);});
+  $('#memberSignOut').addEventListener('click',async()=>{if(db)await db.auth.signOut();showRegistryView('login');selectAuthTab('login');alertUser('Signed out.');});
+  $('img[data-logo-fallback]').forEach(img=>img.addEventListener('error',()=>{
+    const fallback=img.dataset.logoFallback;
+    if(fallback&&img.getAttribute('src')!==fallback)img.src=fallback;
+  }));
   $('#signOutButton').addEventListener('click',async()=>{
-    if(db)await db.auth.signOut();showDashboard(false);alertUser('Signed out.');
+    if(db)await db.auth.signOut();showRegistryView('login');selectAuthTab('login');alertUser('Signed out.');
   });
   $$('[data-dash-tab]').forEach(button=>button.addEventListener('click',()=>{
     selected=button.dataset.dashTab;

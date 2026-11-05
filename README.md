@@ -80,3 +80,10 @@ Future Games are represented as *expressions of interest*, not approved fixtures
 ## License
 
 Website files are made for the MSC project. External references and trademarks remain the property of their respective owners.
+## Member account registration (November 2026)
+The database includes public.msc_member_profiles with user-owned RLS; delegation and host applications have user_id for member tracking. Members can create accounts on the Registry page and update private profiles. Signing up **never** grants administrative access. The administrator must be provisioned separately in Supabase Authentication, marked confirmed, then inserted into public.msc_admins by an authorised project owner.
+
+If immediate signup without email verification is required, the project owner must disable email confirmation in Supabase Dashboard → Authentication → Providers → Email. The GitHub frontend cannot safely change this project-level setting.
+
+## Supplied exact logo
+The site is configured to load the user's original unmodified PNG from assets/msc-official.png, with an SVG fallback while the PNG is absent. Upload the exact attached PNG to that path; no trace, redesign or SVG conversion should be used. The GitHub connector currently exposes only UTF-8 file writes, so source changes cannot themselves upload the PNG bytes.
