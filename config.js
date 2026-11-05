@@ -1,6 +1,7 @@
-// Public Supabase settings only. NEVER put an admin password or service-role key here.
+// Public client configuration. The publishable key is intended for browser use.
+// Never commit service_role keys or admin passwords.
 export const MSC_CONFIG = {
-  supabaseUrl: '',
-  supabasePublishableKey: '',
+  supabaseUrl: 'https://mmetxqmyxhxwmjpxjuzb.supabase.co',
+  supabasePublishableKey: 'sb_publishable_314yXILQn9JPXKVWYVgRcw_FFKVJOZa',
   adminEmail: 'admin@mscgames.cgw'
 };
