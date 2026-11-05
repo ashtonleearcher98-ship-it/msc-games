@@ -279,7 +279,10 @@ function renderTable(){
         :selected==='accreditations'
           ?(row.status==='active'?'<button data-record-action="revoked" data-id="'+row.id+'">Revoke</button>':'<button data-record-action="active" data-id="'+row.id+'">Restore</button>')
           :selected==='hosts'||selected==='delegations'
-            ?(row.status==='pending'?'<button data-record-action="approved" data-id="'+row.id+'">Approve</button> <button data-record-action="rejected" data-id="'+row.id+'">Reject</button>':'<button data-record-action="pending" data-id="'+row.id+'">Reopen</button>')
+            ?('<button type="button" class="msc-review-btn approve" data-record-action="approved" data-id="'+row.id+'" '+(row.status==='approved'?'disabled title="Already approved"':'')+'>Approve</button> '+
+              '<button type="button" class="msc-review-btn decline" data-record-action="rejected" data-id="'+row.id+'" '+(row.status==='rejected'?'disabled title="Already declined"':'')+'>Decline</button>'+
+              (row.status!=='pending'?' <button type="button" class="msc-review-btn reopen" data-record-action="pending" data-id="'+row.id+'">Reopen</button>':''))
+
             :''
       :'<span class="restricted-action">View only</span>';
     let cells='';
@@ -299,28 +302,125 @@ function renderTable(){
   $('#emptyRecords').classList.toggle('is-hidden',filtered.length>0);
   $('#registryEditor').classList.toggle('is-hidden',selected!=='registry'||!canDecide);
 }
-async function setStatus(id,status){
-  if(!admin||!db||adminRole!=='superadmin')return;
-  let result;
-  const names={hosts:'host',delegations:'delegation'};
-  if(selected==='accreditations'){
-    if(!['active','revoked'].includes(status))return;
-    if(!confirm((status==='revoked'?'Revoke':'Restore')+' accreditation for this nation?'))return;
-    result=await db.rpc('msc_set_accreditation',{p_id:id,p_status:status});
-  }else if(names[selected]){
-    if(!['pending','approved','rejected'].includes(status))return;
-    if(!confirm((status==='approved'?'Approve':status==='rejected'?'Reject':'Reopen')+' this '+names[selected]+' application?'))return;
-    result=await db.rpc('msc_decide_application',{p_kind:names[selected],p_id:id,p_decision:status});
-  }else if(selected==='registry'){
-    if(!['active','inactive'].includes(status))return;
-    result=await db.from('msc_registry_entries').update({status,reviewed_at:new Date().toISOString()}).eq('id',id);
-  }else return;
-  if(result.error){
-    console.error(result.error);alertUser('Decision failed: '+(result.error.message||'Unknown error'));return;
-  }
-  alertUser('Decision saved and registry refreshed.');
-  await refresh();
+
+let pendingDecision=null;
+let decisionBusy=false;
+let decisionPriorFocus=null;
+
+function closeDecisionDialog(){
+  if(decisionBusy)return;
+  $('#decisionModal').classList.add('is-hidden');
+  $('#decisionModal').setAttribute('aria-hidden','true');
+  $('#decisionModalError').textContent='';
+  pendingDecision=null;
+  if(decisionPriorFocus && decisionPriorFocus.isConnected)decisionPriorFocus.focus();
+  decisionPriorFocus=null;
 }
+
+function setDecisionStatus(text,success=false){
+  const box=$('#decisionStatus');
+  if(!box)return;
+  box.textContent=text;
+  box.classList.toggle('success',success);
+  box.classList.toggle('is-hidden',!text);
+}
+
+function setStatus(id,status){
+  if(!admin||!db||adminRole!=='superadmin'){
+    setDecisionStatus('This action requires a signed-in MSC Superadmin account.');
+    return;
+  }
+  const section=selected;
+  const item=(rows[section]||[]).find(x=>String(x.id)===String(id));
+  if(!item){
+    setDecisionStatus('That record could not be found. Refresh the records and try again.');
+    return;
+  }
+  const valid=section==='registry'?['active','inactive']:section==='accreditations'?['active','revoked']:['approved','rejected','pending'];
+  if(!valid.includes(status)||!['registry','accreditations','hosts','delegations'].includes(section))return;
+  const current=item.status;
+  if(current===status){
+    setDecisionStatus('This record already has the selected status.');
+    return;
+  }
+  const actionTitle={approved:'Approve application',rejected:'Decline application',pending:'Reopen application',active:'Activate record',inactive:'Deactivate record',revoked:'Revoke accreditation'}[status];
+  if(!actionTitle)return;
+  decisionPriorFocus=document.activeElement;
+  pendingDecision={id,status,section,nation:item.nation_name||'Selected nation'};
+  $('#decisionModalTitle').textContent=actionTitle;
+  $('#decisionModalDescription').textContent=
+    section==='hosts'&&status==='approved' ? 'Approve '+item.nation_name+' as a future MSC Games host? This will create an active hosting accreditation.':
+    section==='delegations'&&status==='approved' ? 'Approve '+item.nation_name+' as an MSC Games delegation? This will create an active delegation accreditation.':
+    status==='rejected' ? 'Decline the application from '+item.nation_name+'? Any existing accreditation for this application will be revoked.':
+    status==='pending' ? 'Reopen '+item.nation_name+' for review? Any existing accreditation for this application will be revoked.':
+    status==='revoked' ? 'Revoke the accreditation held by '+item.nation_name+'?':
+    status==='active'&&section==='accreditations' ? 'Restore the accreditation held by '+item.nation_name+'? The underlying application must still be approved.':
+    'Change the registry status for '+item.nation_name+'?';
+  const button=$('#decisionConfirm');
+  button.textContent=actionTitle;
+  button.classList.toggle('is-decline',status==='rejected'||status==='revoked'||status==='inactive');
+  button.disabled=false;
+  $('#decisionModalError').textContent='';
+  $('#decisionModal').setAttribute('aria-hidden','false');
+  $('#decisionModal').classList.remove('is-hidden');
+  button.focus();
+}
+async function commitDecision(){
+  if(decisionBusy||!pendingDecision)return;
+  const decision={...pendingDecision};
+  const button=$('#decisionConfirm');
+  decisionBusy=true;
+  button.disabled=true;
+  $('#decisionCancel').disabled=true;
+  const originalText=button.textContent;
+  button.textContent='Saving decision…';
+  $('#decisionModalError').textContent='';
+  try{
+    const client=await getDB();
+    if(!client)throw new Error('Unable to connect to the MSC database. Try again.');
+    const {data:{user},error:userError}=await client.auth.getUser();
+    if(userError||!user)throw new Error('Your session has expired. Please sign in again.');
+    let result;
+    if(decision.section==='hosts'||decision.section==='delegations'){
+      result=await client.rpc('msc_decide_application',{
+        p_kind:decision.section==='hosts'?'host':'delegation',
+        p_id:decision.id,
+        p_decision:decision.status
+      });
+      if(result.error)throw result.error;
+      if(result.data?.ok!==true)throw new Error('The server did not confirm the application decision.');
+    }else if(decision.section==='accreditations'){
+      result=await client.rpc('msc_set_accreditation',{p_id:decision.id,p_status:decision.status});
+      if(result.error)throw result.error;
+      if(result.data?.ok!==true)throw new Error('The server did not confirm the accreditation update.');
+    }else if(decision.section==='registry'){
+      result=await client.from('msc_registry_entries')
+        .update({status:decision.status,reviewed_at:new Date().toISOString()})
+        .eq('id',decision.id).select('id,status').maybeSingle();
+      if(result.error)throw result.error;
+      if(!result.data||result.data.status!==decision.status)throw new Error('The registry did not save the change.');
+    }else throw new Error('Unknown decision type.');
+    setDecisionStatus('Saved: '+decision.nation+' — '+decision.status+'.',true);
+    pendingDecision=null;
+    $('#decisionModal').classList.add('is-hidden');
+    $('#decisionModal').setAttribute('aria-hidden','true');
+    await refresh();
+    alertUser('Decision saved successfully.');
+    if(decisionPriorFocus?.isConnected)decisionPriorFocus.focus();
+    decisionPriorFocus=null;
+  }catch(error){
+    console.error('MSC decision could not be saved',error);
+    const details=String(error.message||'Please retry.');
+    $('#decisionModalError').textContent='Could not save this decision: '+details;
+    setDecisionStatus('Decision not saved. '+details,false);
+  }finally{
+    decisionBusy=false;
+    button.disabled=false;
+    $('#decisionCancel').disabled=false;
+    button.textContent=originalText;
+  }
+}
+
 async function addRegistryEntry(form){
   if(!admin||!db||adminRole!=='superadmin'||!form.reportValidity())return;
   try{
@@ -401,8 +501,19 @@ function setup(){
   $('#exportButton').addEventListener('click',exportCSV);
   $('#registryForm').addEventListener('submit',event=>{event.preventDefault();addRegistryEntry(event.currentTarget);});
   $('#recordsBody').addEventListener('click',event=>{
-    const btn=event.target.closest('[data-record-action]');
-    if(btn)setStatus(btn.dataset.id,btn.dataset.recordAction);
+    const btn=event.target.closest('button[data-record-action]');
+    if(btn&&!btn.disabled)setStatus(btn.dataset.id,btn.dataset.recordAction);
+  });
+  $('#decisionConfirm').addEventListener('click',commitDecision);
+  $('#decisionCancel').addEventListener('click',closeDecisionDialog);
+  $('#decisionModal').addEventListener('click',event=>{
+    if(event.target===$('#decisionModal'))closeDecisionDialog();
+  });
+  document.addEventListener('keydown',event=>{
+    if(event.key==='Escape'&&!$('#decisionModal').classList.contains('is-hidden')){
+      event.preventDefault();
+      closeDecisionDialog();
+    }
   });
 }
 setup();

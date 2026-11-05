@@ -86,3 +86,27 @@
 .member-application .pill-status.revoked{background:#fff1f1;color:#b94646}
 @media(max-width:800px){.stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:500px){.stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.dash-controls .tab{padding:10px 12px}}
+
+/* MSC Superadmin decision controls — no browser-native confirmation dialogs */
+.msc-review-btn{font:800 11px/1.2 Manrope,system-ui,sans-serif;cursor:pointer;border:1px solid #ccdaf1;background:#fff;color:#2455b9;padding:9px 12px;border-radius:10px;white-space:nowrap;transition:background .15s,box-shadow .15s,transform .15s}
+.records-table .msc-review-btn.approve{background:#e6f7ee;color:#186747;border-color:#bce7ce}
+.records-table .msc-review-btn.decline{background:#fff0f0;color:#ae303b;border-color:#f0c4ca}
+.records-table .msc-review-btn.reopen{background:#f3f6fb;color:#4c5f80}
+.records-table .msc-review-btn:hover:not(:disabled){filter:brightness(.95);box-shadow:0 3px 12px #0c1d3a20;transform:translateY(-1px)}
+.records-table .msc-review-btn:disabled{opacity:.4;cursor:default}
+.decision-status{padding:16px 19px;border-radius:15px;border:1px solid #f1cfbd;background:#fff7f1;color:#a94826;font-size:12px;font-weight:750;margin-bottom:16px}
+.decision-status.success{background:#ecfbf4;border-color:#aaddc4;color:#18744b}
+.decision-modal{position:fixed;inset:0;z-index:1000;background:#081c3dbe;backdrop-filter:blur(8px);display:flex;justify-content:center;align-items:center;padding:18px}
+.decision-modal.is-hidden{display:none!important}
+.decision-modal-card{background:#fff;color:#122b50;width:min(100%,510px);border:1px solid #dae5f6;border-radius:27px;box-shadow:0 35px 120px #0004;padding:clamp(24px,5vw,42px)}
+.decision-modal-emblem{width:53px;height:53px;display:grid;place-items:center;border-radius:16px;background:linear-gradient(130deg,#124bbb,#315bfa);color:#fff;font:900 17px Manrope,system-ui}
+.decision-modal-label{font:800 10px/1.4 Manrope,system-ui;color:#4470b1;letter-spacing:.18em;margin:23px 0 8px}
+.decision-modal-card h2{font:800 clamp(23px,3vw,31px)/1.2 Manrope,system-ui;margin:0 0 12px;letter-spacing:-.04em}
+.decision-modal-card p#decisionModalDescription{font-size:14px;line-height:1.7;color:#687b94;margin:0 0 24px}
+.decision-modal-error{color:#a8292f;font-size:12px;line-height:1.6;margin:0 0 12px}
+.decision-modal-error:empty{display:none}
+.decision-modal-buttons{display:flex;gap:11px;flex-wrap:wrap;justify-content:flex-end}
+.decision-modal-buttons button{min-height:44px}
+#decisionConfirm.is-decline{background:#bb3547;color:#fff;border-color:#bb3547}
+.decision-modal button:disabled{opacity:.65;cursor:wait}
+@media(max-width:560px){.decision-modal-buttons{flex-direction:column-reverse}.decision-modal-buttons button{width:100%}}
