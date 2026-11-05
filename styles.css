@@ -67,3 +67,10 @@
 .brand img,.login-card-top img,.footer-brand img{object-fit:contain}
 .hero-emblem img{object-fit:contain}
 @media(max-width:800px){.member-grid{grid-template-columns:1fr}.member-card{padding:23px}.member-summary{padding:28px}}
+
+/* Preserve the supplied 1:1 PNG logo without cropping, recolouring or redrawing. */
+.brand img{width:56px;height:56px;background:#f7fbff;border-radius:14px;padding:3px;object-fit:contain}
+.hero-emblem img{width:min(318px,80vw);height:auto;max-height:350px;object-fit:contain;border-radius:25px;background:#f7fbff;padding:7px;box-shadow:0 24px 50px #040e2955}
+.login-card-top img{width:53px;height:53px;object-fit:contain;border-radius:10px;background:#f7fbff}
+.footer-brand img{width:66px;height:66px;object-fit:contain;background:#f7fbff;border-radius:14px}
+@media(max-width:560px){.hero-emblem img{width:min(250px,76vw)}.brand img{width:47px;height:47px}}
