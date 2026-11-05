@@ -74,3 +74,15 @@
 .login-card-top img{width:53px;height:53px;object-fit:contain;border-radius:10px;background:#f7fbff}
 .footer-brand img{width:66px;height:66px;object-fit:contain;background:#f7fbff;border-radius:14px}
 @media(max-width:560px){.hero-emblem img{width:min(250px,76vw)}.brand img{width:47px;height:47px}}
+
+/* MSC Superadmin authority and decision ledger */
+.admin-role-pill{display:inline-flex;align-items:center;gap:8px;margin-top:15px;padding:9px 15px;border-radius:99px;border:1px solid #cbd7ea;color:#547096;background:#f2f7fd;font-size:10px;font-weight:900;letter-spacing:.09em}
+.admin-role-pill.role-superadmin{background:#edf5ff;color:#1554d2;border-color:#b5cfff}
+.admin-role-pill.role-superadmin:before{content:"★";font-size:12px}
+.stat-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.dash-controls .tabs{flex-wrap:wrap;row-gap:9px}
+.restricted-action{font-size:11px;font-weight:700;color:#8d9aab}
+.member-credentials{border-bottom:1px solid #e7edf5;margin-bottom:24px;padding-bottom:18px}
+.member-application .pill-status.revoked{background:#fff1f1;color:#b94646}
+@media(max-width:800px){.stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:500px){.stat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.dash-controls .tab{padding:10px 12px}}

@@ -87,3 +87,9 @@ If immediate signup without email verification is required, the project owner mu
 
 ## Supplied exact logo
 The site is configured to load the user's original unmodified PNG from assets/msc-official.png, with an SVG fallback while the PNG is absent. Upload the exact attached PNG to that path; no trace, redesign or SVG conversion should be used. The GitHub connector currently exposes only UTF-8 file writes, so source changes cannot themselves upload the PNG bytes.
+
+## MSC Superadmin (2026-11-05)
+The database role is stored in `public.msc_admins.role`. The existing confirmed `admin@mscgames.cgw` account was promoted to the `superadmin` role, with no password committed to GitHub.
+Only this role can make final host-country and delegation decisions. An authorised reviewer opens Registry → Delegations or Host applications and chooses Approve / Reject / Reopen. Database RPC `msc_decide_application` atomically updates the application, creates or revokes an accreditation, and appends `msc_review_audit`. The Accredited nations tab can revoke or restore an approved accreditation via `msc_set_accreditation`; restoration requires a currently approved underlying application. The Decision history tab shows the record of changes. RLS enforces permissions for both functions and tables, independent of the browser interface.
+Ordinary micronation members cannot access private applications belonging to other nations, cannot grant themselves staff or Superadmin rights, and cannot publish accreditations.
+**Security note:** MSC Superadmin is scoped only to this website and its database, not global Supabase account ownership. Rotate the previously shared initial password, and enable MFA where available.

@@ -2,7 +2,7 @@ import { MSC_CONFIG } from './config.js';
 const $ = (selector, root=document) => root.querySelector(selector);
 const $$ = (selector, root=document) => Array.from(root.querySelectorAll(selector));
 const ready = /^https:\/\/[a-z0-9-]+\.supabase\.co\/?$/.test(MSC_CONFIG.supabaseUrl) && MSC_CONFIG.supabasePublishableKey.length > 20;
-let db=null, admin=null, member=null, selected='delegations', rows={delegations:[],hosts:[],registry:[]}, notification;
+let db=null, admin=null, member=null, adminRole='member', selected='delegations', rows={delegations:[],hosts:[],registry:[],accreditations:[],audit:[]}, notification;
 let editionsLoaded = false;
 
 function alertUser(message){
@@ -83,7 +83,7 @@ function showRegistryView(which){
   $('#registryLogin').classList.toggle('is-hidden',which!=='login');
   $('#registryDashboard').classList.toggle('is-hidden',which!=='admin');
   $('#memberDashboard').classList.toggle('is-hidden',which!=='member');
-  if(which!=='admin')admin=null;
+  if(which!=='admin'){admin=null;adminRole='member';}
   if(which!=='member')member=null;
 }
 function selectAuthTab(which){
@@ -104,12 +104,16 @@ async function checkSession(){
   try{
     const {data,error}=await client.auth.getUser();
     if(error||!data?.user){showRegistryView('login');return;}
-    const {data:grant,error:grantError}=await client.from('msc_admins').select('user_id').eq('user_id',data.user.id).maybeSingle();
+    const {data:grant,error:grantError}=await client.from('msc_admins').select('user_id,role').eq('user_id',data.user.id).maybeSingle();
     if(grantError)throw grantError;
     if(grant){
       admin=data.user;
+      adminRole=grant.role==='superadmin'?'superadmin':'admin';
       showRegistryView('admin');
       $('#adminIdentity').textContent=data.user.email||'Registry administrator';
+      $('#adminRolePill').textContent=adminRole==='superadmin'?'SUPERADMIN · FINAL AUTHORITY':'ADMIN · REVIEW ACCESS';
+      $('#adminRolePill').classList.toggle('role-superadmin',adminRole==='superadmin');
+      $('[data-superadmin-only]').forEach(el=>el.classList.toggle('is-hidden',adminRole!=='superadmin'));
       await refresh();
     }else{
       member=data.user;
@@ -192,12 +196,15 @@ async function loadMemberData(user){
     form.elements.nation_name.value=profile?.nation_name||'';
     form.elements.representative.value=profile?.representative||'';
     $('#memberGreeting').textContent=profile?.nation_name?'Welcome, '+profile.nation_name+'.':'Welcome to the MSC registry.';
-    const [delegations,hosts]=await Promise.all([
+    const [delegations,hosts,accreditations]=await Promise.all([
       client.from('msc_delegation_applications').select('nation_name,status,created_at').eq('user_id',user.id).order('created_at',{ascending:false}).limit(30),
-      client.from('msc_host_applications').select('nation_name,status,created_at').eq('user_id',user.id).order('created_at',{ascending:false}).limit(30)
+      client.from('msc_host_applications').select('nation_name,status,created_at').eq('user_id',user.id).order('created_at',{ascending:false}).limit(30),
+      client.from('msc_accreditations').select('nation_name,application_kind,status,approved_at').eq('user_id',user.id).order('approved_at',{ascending:false}).limit(30)
     ]);
-    if(delegations.error||hosts.error)throw delegations.error||hosts.error;
+    if(delegations.error||hosts.error||accreditations.error)throw delegations.error||hosts.error||accreditations.error;
     const merged=[...(delegations.data||[]).map(x=>({...x,kind:'Delegation'})),...(hosts.data||[]).map(x=>({...x,kind:'Hosting'}))].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+    const approved=accreditations.data||[];
+    $('#memberAccreditations').innerHTML=approved.length?approved.map(x=>'<div class="member-application"><div><strong>'+safe(x.nation_name)+'</strong><small>'+safe(x.application_kind)+' · Approved '+dateText(x.approved_at)+'</small></div><span class="pill-status '+safe(x.status,20)+'">'+safe(x.status,20)+'</span></div>').join(''):'<p class="member-empty">No hosting or delegation accreditations are active yet.</p>';
     $('#memberApplications').innerHTML=merged.length?merged.map(x=>'<div class="member-application"><div><strong>'+safe(x.nation_name)+'</strong><small>'+safe(x.kind)+' · '+dateText(x.created_at)+'</small></div><span class="pill-status '+safe(x.status,20)+'">'+safe(x.status,20)+'</span></div>').join(''):'<p class="member-empty">No applications are linked to your account. Submit an application while signed in to track it here.</p>';
   }catch(error){console.error('Member profile failed',error);message('memberProfileMessage','Your profile could not be loaded. Please retry.');}
 }
@@ -218,20 +225,33 @@ async function saveMemberProfile(form){
   }catch(error){console.error(error);message('memberProfileMessage','Unable to save the profile. '+String(error.message||''));}
 }
 
+
 async function refresh(){
   if(!db||!admin)return;
+  const superadmin=adminRole==='superadmin';
   try{
-    const [d,h,r]=await Promise.all([
+    const requests=[
       db.from('msc_delegation_applications').select('*').order('created_at',{ascending:false}).limit(500),
       db.from('msc_host_applications').select('*').order('created_at',{ascending:false}).limit(500),
       db.from('msc_registry_entries').select('*').order('created_at',{ascending:false}).limit(500)
-    ]);
-    if(d.error||h.error||r.error)throw d.error||h.error||r.error;
-    rows={delegations:d.data||[],hosts:h.data||[],registry:r.data||[]};
+    ];
+    if(superadmin){
+      requests.push(db.from('msc_accreditations').select('*').order('approved_at',{ascending:false}).limit(500));
+      requests.push(db.from('msc_review_audit').select('*').order('created_at',{ascending:false}).limit(500));
+    }
+    const results=await Promise.all(requests);
+    const firstError=results.find(x=>x.error)?.error;
+    if(firstError)throw firstError;
+    rows={
+      delegations:results[0].data||[],hosts:results[1].data||[],registry:results[2].data||[],
+      accreditations:results[3]?.data||[],audit:results[4]?.data||[]
+    };
     $('#statDelegations').textContent=rows.delegations.length;
     $('#statHosts').textContent=rows.hosts.length;
     $('#statPending').textContent=[...rows.delegations,...rows.hosts].filter(x=>x.status==='pending').length;
     $('#statRegistry').textContent=rows.registry.length;
+    $('#statAccreditations').textContent=rows.accreditations.filter(x=>x.status==='active').length;
+    $('#statActiveHosts').textContent=rows.accreditations.filter(x=>x.status==='active'&&x.application_kind==='host').length;
     renderTable();
   }catch(error){console.error(error);alertUser('Records could not be loaded. Check registry database permissions.');}
 }
@@ -242,47 +262,74 @@ function dateText(v){return v?new Date(v).toLocaleDateString(undefined,{day:'num
 function renderTable(){
   const query=$('#tableSearch').value.trim().toLowerCase();
   const filtered=(rows[selected]||[]).filter(row=>Object.values(row).some(value=>String(value??'').toLowerCase().includes(query)));
-  const headings=selected==='delegations'?['Nation','Delegate / email','Sports','Date','Status','Review']:
-    selected==='hosts'?['Nation','Contact / email','Host proposal','Edition','Status','Review']:
-    ['Nation','Representative','Notes','Status','Manage'];
+  const headings={
+    delegations:['Nation','Delegate / email','Sports','Date','Status','Superadmin decision'],
+    hosts:['Nation','Contact / email','Host proposal','Edition','Status','Superadmin decision'],
+    registry:['Nation','Representative','Notes','Status','Manage'],
+    accreditations:['Nation','Category','Edition','Representative','Date','Status','Superadmin controls'],
+    audit:['Nation','Review type','Decision','Recorded at','Actor']
+  }[selected]||[];
   $('#recordsHeader').innerHTML='<tr>'+headings.map(x=>'<th scope="col">'+x+'</th>').join('')+'</tr>';
+  const canDecide=adminRole==='superadmin';
   $('#recordsBody').innerHTML=filtered.map(row=>{
-    const badge='<span class="pill-status '+safe(row.status,20)+'">'+safe(row.status,20)+'</span>';
-    let actions='';
-    if(selected==='registry'){
-      actions=row.status==='active'?'<button data-record-action="inactive" data-id="'+row.id+'">Deactivate</button>':'<button data-record-action="active" data-id="'+row.id+'">Activate</button>';
-    }else{
-      actions=row.status==='pending'
-        ?'<button data-record-action="approved" data-id="'+row.id+'">Approve</button> <button data-record-action="rejected" data-id="'+row.id+'">Reject</button>'
-        :'<button data-record-action="pending" data-id="'+row.id+'">Reopen</button>';
-    }
+    const status='<span class="pill-status '+safe(row.status||row.decision,20)+'">'+safe(row.status||row.decision,20)+'</span>';
+    const controls=canDecide
+      ?selected==='registry'
+        ?(row.status==='active'?'<button data-record-action="inactive" data-id="'+row.id+'">Deactivate</button>':'<button data-record-action="active" data-id="'+row.id+'">Activate</button>')
+        :selected==='accreditations'
+          ?(row.status==='active'?'<button data-record-action="revoked" data-id="'+row.id+'">Revoke</button>':'<button data-record-action="active" data-id="'+row.id+'">Restore</button>')
+          :selected==='hosts'||selected==='delegations'
+            ?(row.status==='pending'?'<button data-record-action="approved" data-id="'+row.id+'">Approve</button> <button data-record-action="rejected" data-id="'+row.id+'">Reject</button>':'<button data-record-action="pending" data-id="'+row.id+'">Reopen</button>')
+            :''
+      :'<span class="restricted-action">View only</span>';
     let cells='';
-    if(selected==='delegations')cells='<td><strong>'+safe(row.nation_name,90)+'</strong></td><td>'+safe(row.contact_name,75)+'<br>'+safe(row.email,110)+'</td><td>'+safe(row.sports,110)+'</td><td>'+dateText(row.created_at)+'</td>';
-    else if(selected==='hosts')cells='<td><strong>'+safe(row.nation_name,90)+'</strong></td><td>'+safe(row.contact_name,75)+'<br>'+safe(row.email,110)+'</td><td>'+safe(row.proposal,140)+'<br><small>'+safe(row.hosting_format,60)+'</small></td><td>'+safe(row.preferred_edition,65)+'</td>';
-    else cells='<td><strong>'+safe(row.nation_name,90)+'</strong></td><td>'+safe(row.representative,110)+'</td><td>'+safe(row.notes,120)+'</td>';
-    return '<tr>'+cells+'<td>'+badge+'</td><td>'+actions+'</td></tr>';
+    if(selected==='delegations'){
+      cells='<td><strong>'+safe(row.nation_name,90)+'</strong></td><td>'+safe(row.contact_name,75)+'<br>'+safe(row.email,110)+'</td><td>'+safe(row.sports,110)+'</td><td>'+dateText(row.created_at)+'</td><td>'+status+'</td><td>'+controls+'</td>';
+    }else if(selected==='hosts'){
+      cells='<td><strong>'+safe(row.nation_name,90)+'</strong></td><td>'+safe(row.contact_name,75)+'<br>'+safe(row.email,110)+'</td><td>'+safe(row.proposal,140)+'<br><small>'+safe(row.hosting_format,60)+'</small></td><td>'+safe(row.preferred_edition,65)+'</td><td>'+status+'</td><td>'+controls+'</td>';
+    }else if(selected==='registry'){
+      cells='<td><strong>'+safe(row.nation_name,90)+'</strong></td><td>'+safe(row.representative,110)+'</td><td>'+safe(row.notes,120)+'</td><td>'+status+'</td><td>'+controls+'</td>';
+    }else if(selected==='accreditations'){
+      cells='<td><strong>'+safe(row.nation_name,90)+'</strong></td><td>'+safe(row.application_kind,24)+'</td><td>'+safe(row.edition_label,65)+'</td><td>'+safe(row.representative,100)+'</td><td>'+dateText(row.approved_at)+'</td><td>'+status+'</td><td>'+controls+'</td>';
+    }else if(selected==='audit'){
+      cells='<td><strong>'+safe(row.nation_name,90)+'</strong></td><td>'+safe(row.application_kind,30)+'</td><td>'+status+'</td><td>'+dateText(row.created_at)+'</td><td>'+safe(row.actor_id,48)+'</td>';
+    }
+    return '<tr>'+cells+'</tr>';
   }).join('');
   $('#emptyRecords').classList.toggle('is-hidden',filtered.length>0);
-  $('#registryEditor').classList.toggle('is-hidden',selected!=='registry');
+  $('#registryEditor').classList.toggle('is-hidden',selected!=='registry'||!canDecide);
 }
 async function setStatus(id,status){
-  if(!admin||!db)return;
-  const allowed=selected==='registry'?['active','inactive']:['pending','approved','rejected'];
-  if(!allowed.includes(status))return;
-  try{
-    const {error}=await db.from(mapping[selected]).update({status,reviewed_at:new Date().toISOString()}).eq('id',id);
-    if(error)throw error;
-    alertUser('Registry record updated.');await refresh();
-  }catch(error){console.error(error);alertUser('Record update failed.');}
+  if(!admin||!db||adminRole!=='superadmin')return;
+  let result;
+  const names={hosts:'host',delegations:'delegation'};
+  if(selected==='accreditations'){
+    if(!['active','revoked'].includes(status))return;
+    if(!confirm((status==='revoked'?'Revoke':'Restore')+' accreditation for this nation?'))return;
+    result=await db.rpc('msc_set_accreditation',{p_id:id,p_status:status});
+  }else if(names[selected]){
+    if(!['pending','approved','rejected'].includes(status))return;
+    if(!confirm((status==='approved'?'Approve':status==='rejected'?'Reject':'Reopen')+' this '+names[selected]+' application?'))return;
+    result=await db.rpc('msc_decide_application',{p_kind:names[selected],p_id:id,p_decision:status});
+  }else if(selected==='registry'){
+    if(!['active','inactive'].includes(status))return;
+    result=await db.from('msc_registry_entries').update({status,reviewed_at:new Date().toISOString()}).eq('id',id);
+  }else return;
+  if(result.error){
+    console.error(result.error);alertUser('Decision failed: '+(result.error.message||'Unknown error'));return;
+  }
+  alertUser('Decision saved and registry refreshed.');
+  await refresh();
 }
 async function addRegistryEntry(form){
-  if(!admin||!db||!form.reportValidity())return;
+  if(!admin||!db||adminRole!=='superadmin'||!form.reportValidity())return;
   try{
     const {error}=await db.from('msc_registry_entries').insert(fields(form));
     if(error)throw error;
     form.reset();message('registryMessage','Registry entry created.',true);alertUser('Registry entry added.');await refresh();
   }catch(error){console.error(error);message('registryMessage','Unable to add this registry entry.');}
 }
+
 function csvCell(v){
   let value=String(v??'');if(/^\s*[=+\-@]/.test(value))value="'"+value;
   return '"'+value.replace(/"/g,'""')+'"';
@@ -337,7 +384,7 @@ function setup(){
   $('#signUpTab').addEventListener('click',()=>selectAuthTab('signup'));
   $('#memberProfileForm').addEventListener('submit',event=>{event.preventDefault();saveMemberProfile(event.currentTarget);});
   $('#memberSignOut').addEventListener('click',async()=>{if(db)await db.auth.signOut();showRegistryView('login');selectAuthTab('login');alertUser('Signed out.');});
-  $('img[data-logo-fallback]').forEach(img=>img.addEventListener('error',()=>{
+  $$('img[data-logo-fallback]').forEach(img=>img.addEventListener('error',()=>{
     const fallback=img.dataset.logoFallback;
     if(fallback&&img.getAttribute('src')!==fallback)img.src=fallback;
   }));
