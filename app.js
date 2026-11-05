@@ -157,8 +157,7 @@ async function signup(form){
       email:payload.email,
       password:payload.password,
       options:{
-        data:{nation_name:payload.nation_name,representative:payload.representative},
-        emailRedirectTo:location.origin+location.pathname+'#/registry'
+        data:{nation_name:payload.nation_name,representative:payload.representative}
       }
     });
     if(error)throw error;
