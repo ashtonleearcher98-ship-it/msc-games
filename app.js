@@ -3,6 +3,7 @@ const $ = (selector, root=document) => root.querySelector(selector);
 const $$ = (selector, root=document) => Array.from(root.querySelectorAll(selector));
 const ready = /^https:\/\/[a-z0-9-]+\.supabase\.co\/?$/.test(MSC_CONFIG.supabaseUrl) && MSC_CONFIG.supabasePublishableKey.length > 20;
 let db=null, admin=null, selected='delegations', rows={delegations:[],hosts:[],registry:[]}, notification;
+let editionsLoaded = false;
 
 function alertUser(message){
   const t=$('#toast'); if(!t)return;
@@ -24,6 +25,7 @@ function pageRoute(){
   $('#menuToggle').setAttribute('aria-expanded','false');
   window.scrollTo({top:0,behavior:'instant'});
   if(route==='registry') checkSession();
+  if(route==='games') loadEditionRecords();
 }
 function applicationTab(type){
   const host=type==='host';
@@ -181,6 +183,29 @@ function exportCSV(){
   const a=document.createElement('a');a.href=url;a.download='msc-'+selected+'-'+new Date().toISOString().slice(0,10)+'.csv';
   document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
+async function loadEditionRecords(){
+  if(editionsLoaded)return;
+  const output=$('#liveEditions');if(!output)return;
+  const client=await getDB();
+  if(!client){output.textContent='The Games database is temporarily unavailable.';return;}
+  try{
+    const [editions,disciplines]=await Promise.all([
+      client.from('msc_editions').select('slug,title,period_label,host_nation,status,summary,source_url').order('period_label',{ascending:false}),
+      client.from('msc_disciplines').select('edition_slug,name,programme_status').order('name')
+    ]);
+    if(editions.error||disciplines.error)throw editions.error||disciplines.error;
+    const statusLabels={postponed:'Postponed',host_search:'Replacement host sought',announced:'Announced',scheduled:'Scheduled',completed:'Completed',cancelled:'Cancelled'};
+    const all=editions.data||[];
+    if(!all.length){output.textContent='No Games entries have been published.';return;}
+    output.innerHTML=all.map(e=>{
+      const sports=(disciplines.data||[]).filter(s=>s.edition_slug===e.slug).map(s=>'<span class="sport-chip">'+escapeHTML(s.name)+(s.programme_status==='historical_proposal'?' · proposed':'')+'</span>').join('');
+      const link=String(e.source_url||'').startsWith('https://')?'<a href="'+escapeHTML(e.source_url)+'" target="_blank" rel="noopener noreferrer">View cited source ↗</a>':'';
+      return '<article class="edition-card"><div class="edition-top"><span>'+escapeHTML(e.period_label)+'</span><span class="edition-status">'+escapeHTML(statusLabels[e.status]||e.status)+'</span></div><h3>'+escapeHTML(e.title)+'</h3><p>'+escapeHTML(e.summary)+'</p>'+(e.host_nation?'<small>Original host: '+escapeHTML(e.host_nation)+'</small>':'')+(sports?'<div class="sport-chips">'+sports+'</div>':'')+'<div class="edition-source">'+link+'</div></article>';
+    }).join('');
+    editionsLoaded=true;
+  }catch(error){console.warn('Live Games data unavailable',error);output.textContent='The live Games records are unavailable. The documented timeline below remains accessible.';}
+}
+
 function setup(){
   $('#footerYear').textContent=new Date().getFullYear();
   addEventListener('hashchange',pageRoute);pageRoute();
