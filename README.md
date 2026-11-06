@@ -44,7 +44,7 @@ on conflict (user_id) do nothing;
 1. Create a **public** GitHub repository named `msc-games` under your account.
 2. Upload the contents of this directory (not an extra nested directory) to the repository's default branch.
 3. In repository Settings → Pages, select **GitHub Actions** as the source. The repository includes `.github/workflows/pages.yml` to publish the static site on each push.
-4. Your site will open at `https://YOUR-USERNAME.github.io/msc-games/#/home` when deployment finishes.
+4. Your site will open at `https://greenwickgov.github.io/msc-games/#/home` when deployment finishes.
 5. Set the Supabase project's Auth Site URL to your deployed URL and add the same URL under Auth Redirect URLs if needed.
 
 The site uses hash-based routes intentionally, so deep-linked pages work on GitHub Pages without rewrites.
